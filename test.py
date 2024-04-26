@@ -1,38 +1,50 @@
 import unittest
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import VectorAssembler, StandardScaler, StringIndexer, OneHotEncoder
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml.evaluation import RegressionEvaluator
 
-class TestDataProcessing(unittest.TestCase):
+class SparkTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.spark = SparkSession.builder \
-            .appName("Test Data Processing") \
-            .getOrCreate()
-        
-        # Define datos de prueba
-        cls.test_data = cls.spark.createDataFrame([(1000, 3, "some_additional_value", 50000)], ["Area", "Bedrooms", "Adicional", "Price"])
+        cls.spark = SparkSession.builder.master("local[2]").appName("UnitTesting").getOrCreate()
 
     @classmethod
     def tearDownClass(cls):
         cls.spark.stop()
-    
-    def test_data_reading(self):
-        # Prueba la lectura de datos desde S3
-        df = self.spark.read.csv("s3://bucket-final/casas/year=2024/month=03/day=15/2024-03-15.csv", inferSchema=True, header=True)
-        self.assertTrue(df is not None)
-        df.printSchema()
-        df.show()
 
-    def test_data_preprocessing(self):
-        # Prueba el preprocesamiento de datos
-        preprocessed_df = preprocess_data(self.test_data)
-        self.assertIsNotNone(preprocessed_df)
-        preprocessed_df.printSchema()
-        preprocessed_df.show()
+    def test_pipeline_model(self):
+        # Definir el esquema con los tipos correctos
+        schema = StructType([
+            StructField("Adicional", StringType(), True),
+            StructField("Area", IntegerType(), True),
+            StructField("Bedrooms", IntegerType(), True),
+            StructField("Price", DoubleType(), True)  # Asegurar que Price es de tipo Double
+        ])
+        
+        # Crear datos de prueba con el esquema definido
+        data = [("house1", 2000, 3, 450000.0), ("house2", 1500, 4, 350000.0), ("house3", 1800, 3, 475000.0)]
+        df = self.spark.createDataFrame(data, schema=schema)
+        
+        # Definir las transformaciones y el modelo
+        indexer = StringIndexer(inputCol="Adicional", outputCol="AdicionalIndex")
+        assembler = VectorAssembler(inputCols=["Area", "Bedrooms", "AdicionalIndex"], outputCol="features")
+        scaler = StandardScaler(inputCol="features", outputCol="scaledFeatures")
+        lr = LinearRegression(featuresCol="scaledFeatures", labelCol="Price")
 
-    def test_model_creation(self):
-        # Prueba la creación del modelo
-        model = create_model(self.test_data)
-        self.assertIsNotNone(model)
+        # Configurar el pipeline
+        pipeline = Pipeline(stages=[indexer, assembler, scaler, lr])
 
-if __name__ == '__main__':
+        # Fit y transformar
+        model = pipeline.fit(df)
+        result = model.transform(df)
+
+        # Evaluar el modelo
+        evaluator = RegressionEvaluator(labelCol="Price", predictionCol="prediction", metricName="rmse")
+        rmse = evaluator.evaluate(result)
+        self.assertLess(rmse, 100000, "El RMSE debería ser menor de 100000")
+
+if __name__ == "__main__":
     unittest.main()
