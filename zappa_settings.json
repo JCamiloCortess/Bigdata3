@@ -5,9 +5,9 @@
         "keep_warm": false,
         "role_name": "LabRole",
         "manage_roles": false,
-        "project_name": "parcial2-0bigda",
+        "project_name":  "bigdata2",
         "runtime": "python3.9",
-        "s3_bucket": "zappa-parcial2corte"
+        "s3_bucket":  "zappa-nwwut9ykd"
         "apigateway_enabled": false,
         "events": [
             {
